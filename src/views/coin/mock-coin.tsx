@@ -11,6 +11,7 @@ import { timeSince } from "@/utils/timeSpents";
 import { SolanaToken } from "@rinegade/memechan-sol-sdk";
 import { useRouter } from "next/router";
 import { useMemo, useState } from "react";
+import toast from "react-hot-toast";
 
 const tabs = ["Chart", "Comments"];
 
@@ -115,6 +116,9 @@ export function MockCoin({ coinMetadata, tab }: { coinMetadata: SolanaToken; tab
 
         <div className="flex flex-col gap-3">
           <TokenCard token={coinMetadata} progressInfo={progressInfo} showLinks disableContent={false} />
+          <MockSwap coinMetadata={coinMetadata} lastPrice={chart.lastPrice} />
+          <MockInfo coinMetadata={coinMetadata} progress={progress} />
+          <MockHolders coinMetadata={coinMetadata} />
         </div>
       </div>
     </>
@@ -368,6 +372,176 @@ function MockMarketChart({ chart, accent, progress }: { chart: MockChartData; ac
       </svg>
     </div>
   );
+}
+
+function MockSwap({ coinMetadata, lastPrice }: { coinMetadata: SolanaToken; lastPrice: number }) {
+  const [coinToMeme, setCoinToMeme] = useState(true);
+  const [amount, setAmount] = useState("");
+  const price = Math.max(lastPrice, 1e-9);
+  const parsed = Number(amount) || 0;
+  const receive = coinToMeme ? parsed / price : parsed * price;
+  const inSymbol = coinToMeme ? "SOL" : coinMetadata.symbol;
+  const outSymbol = coinToMeme ? coinMetadata.symbol : "SOL";
+
+  return (
+    <Card>
+      <Card.Header>
+        <Typography variant="h4" color="mono-600">
+          Swap
+        </Typography>
+      </Card.Header>
+      <Card.Body additionalStyles="flex flex-col gap-3">
+        <div className="flex gap-2">
+          <div className="h-9 flex-1">
+            <Button variant={coinToMeme ? "primary" : "secondary"} onClick={() => setCoinToMeme(true)}>
+              Buy
+            </Button>
+          </div>
+          <div className="h-9 flex-1">
+            <Button variant={!coinToMeme ? "primary" : "secondary"} onClick={() => setCoinToMeme(false)}>
+              Sell
+            </Button>
+          </div>
+        </div>
+        <TextInput
+          value={amount}
+          setValue={(v) => setAmount(v.replace(/[^0-9.]/g, ""))}
+          placeholder="0"
+          endAdornment={
+            <Typography variant="body" color="mono-500">
+              {inSymbol}
+            </Typography>
+          }
+          className="primary-border p-[15px] custom-inner-shadow"
+        />
+        <div className="flex justify-between items-center">
+          <Typography variant="body" color="mono-500">
+            You receive
+          </Typography>
+          <Typography variant="body" color="mono-600">
+            {receive > 0 ? formatNumberForDisplay(receive) : "0"} {outSymbol}
+          </Typography>
+        </div>
+        <div className="h-11">
+          <Button variant="primary" onClick={() => toast("Demo mode — connect a wallet on mainnet to trade")}>
+            {coinToMeme ? "Buy" : "Sell"} {coinMetadata.symbol}
+          </Button>
+        </div>
+      </Card.Body>
+    </Card>
+  );
+}
+
+function MockInfo({ coinMetadata, progress }: { coinMetadata: SolanaToken; progress: number }) {
+  const handleCopy = (text: string) => {
+    navigator.clipboard?.writeText(text).then(() => toast.success("Copied to clipboard"));
+  };
+  const pooledSol = Math.round((Number(coinMetadata.quoteIn) / 1e9) * 100) / 100 || progress;
+
+  return (
+    <Card>
+      <Card.Header>
+        <Typography variant="h4" color="mono-600">
+          Info
+        </Typography>
+      </Card.Header>
+      <Card.Body additionalStyles="flex flex-col gap-y-2">
+        <InfoRow label="Created" value={`${timeSince(coinMetadata.creationTime)} ago`} />
+        <InfoRow label="Market Cap" value={`$${coinMetadata.marketcap.toLocaleString()}`} />
+        <InfoRow label={`Pooled SOL`} value={`${pooledSol} SOL`} />
+        <div className="flex justify-between">
+          <Typography variant="body" color="mono-500">
+            Creator
+          </Typography>
+          <div className="flex gap-x-2 items-baseline">
+            <Typography variant="body" color="mono-600">
+              {coinMetadata.creator.slice(0, 4)}...{coinMetadata.creator.slice(-4)}
+            </Typography>
+            <Typography variant="body" color="primary-100" underline onClick={() => handleCopy(coinMetadata.creator)}>
+              Copy
+            </Typography>
+          </div>
+        </div>
+        <div className="flex justify-between">
+          <Typography variant="body" color="mono-500">
+            CA
+          </Typography>
+          <div className="flex gap-x-2 items-baseline">
+            <Typography variant="body" color="mono-600">
+              {coinMetadata.address.slice(0, 4)}...{coinMetadata.address.slice(-4)}
+            </Typography>
+            <Typography variant="body" color="primary-100" underline onClick={() => handleCopy(coinMetadata.address)}>
+              Copy
+            </Typography>
+          </div>
+        </div>
+      </Card.Body>
+    </Card>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between items-center">
+      <Typography variant="body" color="mono-500">
+        {label}
+      </Typography>
+      <Typography variant="body" color="mono-600">
+        {value}
+      </Typography>
+    </div>
+  );
+}
+
+function MockHolders({ coinMetadata }: { coinMetadata: SolanaToken }) {
+  const seed = hashString(coinMetadata.address);
+  const holderCount = 5 + (seed % 4);
+  // deterministic split: bonding curve + dev + N wallets, normalized to 100%
+  const rows = [
+    { label: `${coinMetadata.address.slice(0, 4)}...${coinMetadata.address.slice(-4)} (bonding curve)`, weight: 40 + (seed % 20) },
+    { label: `${coinMetadata.creator.slice(0, 4)}...${coinMetadata.creator.slice(-4)} (dev)`, weight: 8 + (seed % 7), dev: true },
+    ...Array.from({ length: holderCount }).map((_, i) => ({
+      label: `${mockWallet(seed + i)}`,
+      weight: 2 + ((seed * (i + 3)) % 9),
+      dev: false,
+    })),
+  ];
+  const total = rows.reduce((sum, row) => sum + row.weight, 0);
+
+  return (
+    <Card>
+      <Card.Header>
+        <Typography variant="h4" color="mono-600">
+          Holders
+        </Typography>
+      </Card.Header>
+      <Card.Body additionalStyles="flex flex-col gap-y-1">
+        {rows.map((row, index) => {
+          const pct = ((row.weight / total) * 100).toFixed(2);
+          const highlight = row.dev || Number(pct) > 5;
+
+          return (
+            <div key={index} className="flex justify-between flex-row">
+              <Typography variant="text-button" color="mono-500" underline>
+                {row.label}
+              </Typography>
+              <Typography color={highlight ? "yellow-100" : "mono-600"}>{pct}%</Typography>
+            </div>
+          );
+        })}
+      </Card.Body>
+    </Card>
+  );
+}
+
+function mockWallet(seed: number) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz123456789";
+  let head = "";
+  let tail = "";
+  for (let i = 0; i < 4; i++) head += chars[(seed * (i + 7) + i) % chars.length];
+  for (let i = 0; i < 4; i++) tail += chars[(seed * (i + 13) + i * 3) % chars.length];
+
+  return `${head}...${tail}`;
 }
 
 function buildChartData(token: SolanaToken): MockChartData {
