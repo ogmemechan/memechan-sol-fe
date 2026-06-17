@@ -2,6 +2,8 @@ FROM oven/bun:1.3.13-alpine AS deps
 
 WORKDIR /app
 
+RUN apk add --no-cache build-base python3 libusb-dev eudev-dev
+
 COPY package.json bun.lockb ./
 RUN bun install --frozen-lockfile
 
@@ -44,6 +46,8 @@ RUN bun run build
 FROM node:20-alpine AS runner
 
 WORKDIR /app
+
+RUN apk add --no-cache libusb eudev-libs
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
