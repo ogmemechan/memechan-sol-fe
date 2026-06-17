@@ -1,0 +1,52 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_BE_URL: ${NEXT_PUBLIC_BE_URL:-https://api.memechan.gg}
+        NEXT_PUBLIC_CHART_HISTORICAL_PRICES_ENDPOINT: ${NEXT_PUBLIC_CHART_HISTORICAL_PRICES_ENDPOINT:-https://api.memechan.gg/chart}
+        NEXT_PUBLIC_CHART_CURRENT_PRICE_ENDPOINT: ${NEXT_PUBLIC_CHART_CURRENT_PRICE_ENDPOINT:-https://api.memechan.gg/price}
+        NEXT_PUBLIC_CHART_REALTIME_RELOAD_INTERVAL: ${NEXT_PUBLIC_CHART_REALTIME_RELOAD_INTERVAL:-3000}
+        NEXT_PUBLIC_CHART_PRICE_DIGITS_AFTER_COMMA: ${NEXT_PUBLIC_CHART_PRICE_DIGITS_AFTER_COMMA:-10}
+        NEXT_PUBLIC_SDK_ENV: ${NEXT_PUBLIC_SDK_ENV:-production}
+        NEXT_PUBLIC_USE_MOCK_DATA: ${NEXT_PUBLIC_USE_MOCK_DATA:-false}
+        NEXT_PUBLIC_VCHAN_TOKEN_ADDRESS: ${NEXT_PUBLIC_VCHAN_TOKEN_ADDRESS:-}
+        NEXT_PUBLIC_VECHAN_TOKEN_ADDRESS: ${NEXT_PUBLIC_VECHAN_TOKEN_ADDRESS:-}
+        NEXT_PUBLIC_MEMECHAN_PROGRAM_ID: ${NEXT_PUBLIC_MEMECHAN_PROGRAM_ID:-}
+        NEXT_PUBLIC_MEMECHAN_PROGRAM_ID_V2: ${NEXT_PUBLIC_MEMECHAN_PROGRAM_ID_V2:-}
+        NEXT_PUBLIC_MEMECHAN_PROGRAM_ID_STAKING: ${NEXT_PUBLIC_MEMECHAN_PROGRAM_ID_STAKING:-}
+        CHART_CONTRACT_NAME: ${CHART_CONTRACT_NAME:-USD}
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+    expose:
+      - "3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      web:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
