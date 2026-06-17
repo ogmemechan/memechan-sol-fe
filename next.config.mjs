@@ -3,6 +3,9 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
+  experimental: {
+    cpus: 1,
+  },
   env: {
     NEXT_PUBLIC_CHARTS_API_HOSTNAME: "chart.memechan.xyz",
   },
